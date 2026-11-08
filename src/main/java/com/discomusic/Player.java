@@ -348,16 +348,41 @@ public final class Player {
             try {
                 Header h = bs.readFrame();
                 if (h == null) throw new IOException("bad mp3");
-                msPerFrame = h.ms_per_frame();
-                seconds = h.total_ms((int) Files.size(p)) / 1000.0; // estimate (exact for constant bitrate)
+                seconds = estimate(p);
                 SampleBuffer sb = (SampleBuffer) dec.decodeFrame(h, bs);
                 bs.closeFrame();
                 channels = dec.getOutputChannels();
                 rate = dec.getOutputFrequency();
                 pending = Arrays.copyOf(sb.getBuffer(), sb.getBufferLength());
+                msPerFrame = (sb.getBufferLength() / (float) channels) * 1000f / rate;
             } catch (Exception e) {
                 throw new IOException("bad mp3: " + e.getMessage());
             }
+        }
+
+        /** Length estimate from file size and the first frame's bitrate (exact for constant bitrate). No decoder API needed. */
+        private static double estimate(Path p) {
+            try (java.io.RandomAccessFile f = new java.io.RandomAccessFile(p.toFile(), "r")) {
+                long size = f.length(), off = 0;
+                byte[] id = new byte[10];
+                f.readFully(id);
+                if (id[0] == 'I' && id[1] == 'D' && id[2] == '3')
+                    off = 10 + (((id[6] & 0x7f) << 21) | ((id[7] & 0x7f) << 14) | ((id[8] & 0x7f) << 7) | (id[9] & 0x7f));
+                f.seek(off);
+                byte[] b = new byte[4096];
+                int n = f.read(b);
+                int[] t1 = {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320};
+                int[] t2 = {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160};
+                for (int i = 0; i + 3 < n; i++) {
+                    if ((b[i] & 0xFF) == 0xFF && (b[i + 1] & 0xE0) == 0xE0) {
+                        int ver = (b[i + 1] >> 3) & 3, layer = (b[i + 1] >> 1) & 3, bi = (b[i + 2] >> 4) & 15;
+                        if (ver == 1 || layer != 1 || bi == 0 || bi == 15) continue;
+                        int kbps = (ver == 3 ? t1 : t2)[bi];
+                        return (size - off) * 8.0 / (kbps * 1000.0);
+                    }
+                }
+            } catch (Exception ignored) {}
+            return -1;
         }
 
         private void openStream() throws IOException {

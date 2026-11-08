@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "discomusic",
+  "version": "${version}",
+  "name": "Disco Music",
+  "description": "Lightweight in-game music player. Drop .ogg/.wav files into mods/music.",
+  "authors": ["S6uba"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": { "client": ["com.discomusic.DiscoMod"] },
+  "depends": {
+    "fabricloader": ">=0.19.1",
+    "minecraft": ">=26.2-",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
